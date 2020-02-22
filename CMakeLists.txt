@@ -6,6 +6,9 @@ project(videocards)
 add_executable(videocards main.cpp)
 add_executable(matrix matrix.cpp)
 add_executable(matrix_parallel matrix_parallel.cpp)
+add_executable(opencl opencl.cpp)
+
+target_link_libraries(opencl OpenCL)
 
 FIND_PACKAGE( OpenMP)
 if(OPENMP_FOUND)
