@@ -1,0 +1,5 @@
+venv
+cmake*
+input*
+res*
+.idea
