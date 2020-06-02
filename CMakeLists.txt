@@ -2,15 +2,20 @@ cmake_minimum_required(VERSION 3.6)
 project(videocards)
 # added -fopenmp
 
-
+set(CMAKE_CXX_STANDARD 17)
+#set(CMAKE_CXX_FLAGS -m32)
+#set(CMAKE_C_FLAGS -m32)
 add_executable(videocards main.cpp)
-add_executable(matrix matrix.cpp)
+add_executable(matrix_naive matrix_naive.cpp)
 add_executable(matrix_parallel matrix_parallel.cpp)
-add_executable(opencl opencl.cpp)
+add_executable(a+b_opencl a+b_opencl.cpp)
+add_executable(matrix_opencl matrix_opencl.cpp)
+add_executable(matrix_tile_opencl matrix_tile_opencl.cpp)
 
-target_link_libraries(opencl OpenCL)
+target_link_libraries(matrix_opencl OpenCL)
+target_link_libraries(matrix_tile_opencl OpenCL)
 
-FIND_PACKAGE( OpenMP)
+FIND_PACKAGE(OpenMP)
 if(OPENMP_FOUND)
     message("OPENMP FOUND")
     set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${OpenMP_C_FLAGS}")

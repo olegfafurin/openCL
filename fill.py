@@ -1,3 +1,4 @@
+#!/home/imd239/anaconda3/bin/python
 import sys
 
 def main():
@@ -6,6 +7,8 @@ def main():
         exit(-1)
     f = open(sys.argv[1], "w+")
     n = int(sys.argv[2])
+    f.write(str(n) + "\n")
+    f.write(str(n) + "\n")
     f.write(str(n) + "\n")
     for i in range(n):
         f.write(" ".join(list(map(lambda x: str(x % n), list(range(i, i + n))))) + "\n")
