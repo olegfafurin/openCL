@@ -4,3 +4,6 @@ input*
 res*
 .idea
 neo
+*.in
+*.out
+*.pdf

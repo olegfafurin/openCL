@@ -40,6 +40,7 @@ int main() {
         }
     }
     high_resolution_clock::time_point t_end = high_resolution_clock::now();
+    auto elapsed = duration_cast<microseconds>(t_end - t_start).count();
 
     for (int i = 0; i < n; ++i) {
         for (int j = 0; j < n; ++j) {
@@ -51,6 +52,5 @@ int main() {
     cout << '\n';
 
 
-    auto elapsed = duration_cast<microseconds>(t_end - t_start).count();
     cout << elapsed << " ms elapsed\n";
 }

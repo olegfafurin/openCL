@@ -8,31 +8,76 @@
 #include <vector>
 #include <cstring>
 #include <chrono>
+#include <tuple>
 
 using namespace std;
 
-int main() {
-    cl_uint n;
-    clGetPlatformIDs(0, nullptr, &n);
-    auto ptr = (cl_platform_id *) malloc(n * sizeof(cl_platform_id));
-    clGetPlatformIDs(n, ptr, &n);
+auto GPU_NVIDIA = "NVIDIA";
+auto GPU_AMD = "AMD";
 
-    clGetDeviceIDs(ptr[0], CL_DEVICE_TYPE_GPU, 0, 0, &n);
-    auto ptr2 = (cl_device_id *) malloc(n * sizeof(cl_device_id));
-    clGetDeviceIDs(ptr[0], CL_DEVICE_TYPE_GPU, n, ptr2, &n);
-
-    for (int i = 0; i < n; ++i) {
-        size_t m;
-        clGetDeviceInfo(ptr2[i], CL_DEVICE_NAME, 0, 0, &m);
-        auto ptr3 = (char *) malloc(m * sizeof(char));
-        clGetDeviceInfo(ptr2[i], CL_DEVICE_NAME, m, ptr3, &m);
-        cout << ptr3 << '\n';
-        free(ptr3);
+tuple<bool, int, int, cl_device_type> get_device(cl_uint &platform_cnt, cl_platform_id * platforms, cl_device_type device_type, bool require_discrete_gpu) {
+    for (int i = 0; i < platform_cnt; ++i) {
+        cl_uint device_cnt = 0;
+        clGetDeviceIDs(platforms[i], device_type, 0, nullptr, &device_cnt);
+        auto devices = (cl_device_id *) malloc(device_cnt * sizeof(cl_device_id));
+        clGetDeviceIDs(platforms[i], device_type, platform_cnt, devices, &device_cnt);
+        if (device_cnt > 0) {
+            if (require_discrete_gpu) {
+                for (cl_uint j = 0; j < device_cnt; ++j) {
+                    size_t l;
+                    clGetDeviceInfo(devices[j], CL_DEVICE_NAME, 0, nullptr, &l);
+                    auto device = (char *) malloc(l * sizeof(char));
+                    clGetDeviceInfo(devices[j], CL_DEVICE_NAME, l, device, &l);
+                    if (strstr(device, GPU_AMD) != nullptr || strstr(device, GPU_NVIDIA) != nullptr) {
+                        cout << device << '\n';
+                        free(device);
+                        free(devices);
+                        return make_tuple(true, i, j, device_type);
+                    }
+                    free(device);
+                }
+            }
+            else {
+                size_t l;
+                clGetDeviceInfo(devices[0], CL_DEVICE_NAME, 0, nullptr, &l);
+                auto device = (char *) malloc(l * sizeof(char));
+                clGetDeviceInfo(devices[0], CL_DEVICE_NAME, l, device, &l);
+                cout << device << '\n';
+                free(device);
+                free(devices);
+                return make_tuple(true, i, 0, device_type);
+            }
+        }
+        free(devices);
     }
+    return make_tuple(false, 0, 0, device_type);
+}
 
-    auto context = clCreateContext(0, 1, ptr2, nullptr, nullptr, nullptr);
+int main() {
+    cl_uint platform_cnt, device_cnt;
+    clGetPlatformIDs(0, nullptr, &platform_cnt);
+    auto platforms = (cl_platform_id *) malloc(platform_cnt * sizeof(cl_platform_id));
+    clGetPlatformIDs(platform_cnt, platforms, &platform_cnt);
 
-    auto queue = clCreateCommandQueue(context, ptr2[0], CL_QUEUE_PROFILING_ENABLE, nullptr);
+
+    bool flag;
+    cl_platform_id platform;
+    cl_device_id device;
+    int platform_index, device_index;
+    cl_device_type device_type;
+
+    tie(flag, platform_index, device_index, device_type) = get_device(platform_cnt, platforms, CL_DEVICE_TYPE_GPU, true);
+    if (!flag) tie(flag, platform_index, device_index, device_type) = get_device(platform_cnt, platforms, CL_DEVICE_TYPE_GPU, false);
+    if (!flag) tie(flag, platform_index, device_index, device_type) = get_device(platform_cnt, platforms, CL_DEVICE_TYPE_CPU, false);
+
+    clGetDeviceIDs(platforms[platform_index], device_type, 0, 0, &device_cnt);
+    auto devices = (cl_device_id *) malloc(device_cnt * sizeof(cl_device_id));
+    clGetDeviceIDs(platforms[platform_index], device_type, platform_cnt, devices, &device_cnt);
+
+
+    auto context = clCreateContext(0, 1, devices, nullptr, nullptr, nullptr);
+
+    auto queue = clCreateCommandQueue(context, devices[device_index], CL_QUEUE_PROFILING_ENABLE, nullptr);
 
     ifstream fin("matrix_device_program.cl");
     vector<char> text(1024, 0);
@@ -42,23 +87,27 @@ int main() {
     const size_t len = strlen(data);
 
     auto device_prog = clCreateProgramWithSource(context, 1, &data, &len, nullptr);
-    cl_int err = clBuildProgram(device_prog, 1, ptr2, "", nullptr, nullptr);
+    cl_int err = clBuildProgram(device_prog, 1, devices, "", nullptr, nullptr);
     if (err != 0) {
-        cout << "fucked up\n";
+        cout << "Device code build error: \n";
         size_t s;
-        clGetProgramBuildInfo(device_prog, ptr2[0], CL_PROGRAM_BUILD_LOG, 0, 0, &s);
-        auto ptr4 = (char *) malloc(s * sizeof(char));
-        clGetProgramBuildInfo(device_prog, ptr2[0], CL_PROGRAM_BUILD_LOG, s, ptr4, &s);
-        cout << ptr4;
-        free(ptr4);
+        clGetProgramBuildInfo(device_prog, devices[device_index], CL_PROGRAM_BUILD_LOG, 0, 0, &s);
+        auto err_trace = (char *) malloc(s * sizeof(char));
+        clGetProgramBuildInfo(device_prog, devices[device_index], CL_PROGRAM_BUILD_LOG, s, err_trace, &s);
+        cout << err_trace;
+        free(err_trace);
         exit(err);
     } else {
-        cout << "success\n";
+        cout << "Device code has been built successfully\n";
     }
 
     cl_kernel kernel = clCreateKernel(device_prog, "mult", &err);
 
-    cout << err << '\n';
+    if (err == 0) cout << "Kernel has been created successfully\n";
+    else {
+        cout << "Kernel creation error: exit code " << err << '\n';
+        exit(err);
+    }
 
     cl_int a, b, c;
     cin >> a >> b >> c;
@@ -136,7 +185,6 @@ int main() {
 //    cout << result << '\n';
     cout << t_end - t_start << " ns elapsed";
 
-
-    free(ptr2);
-    free(ptr);
+    free(devices);
+    free(platforms);
 }

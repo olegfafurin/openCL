@@ -14,6 +14,7 @@ add_executable(matrix_tile_opencl matrix_tile_opencl.cpp)
 
 target_link_libraries(matrix_opencl OpenCL)
 target_link_libraries(matrix_tile_opencl OpenCL)
+target_link_libraries(a+b_opencl OpenCL)
 
 FIND_PACKAGE(OpenMP)
 if(OPENMP_FOUND)
