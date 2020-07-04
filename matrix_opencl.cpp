@@ -7,8 +7,10 @@
 #include <fstream>
 #include <vector>
 #include <cstring>
-#include <chrono>
+#include <algorithm>
+#include <random>
 #include <tuple>
+#include "util.h"
 
 using namespace std;
 
@@ -59,7 +61,6 @@ int main() {
     auto platforms = (cl_platform_id *) malloc(platform_cnt * sizeof(cl_platform_id));
     clGetPlatformIDs(platform_cnt, platforms, &platform_cnt);
 
-
     bool flag;
     cl_platform_id platform;
     cl_device_id device;
@@ -74,9 +75,7 @@ int main() {
     auto devices = (cl_device_id *) malloc(device_cnt * sizeof(cl_device_id));
     clGetDeviceIDs(platforms[platform_index], device_type, platform_cnt, devices, &device_cnt);
 
-
     auto context = clCreateContext(0, 1, devices, nullptr, nullptr, nullptr);
-
     auto queue = clCreateCommandQueue(context, devices[device_index], CL_QUEUE_PROFILING_ENABLE, nullptr);
 
     ifstream fin("matrix_device_program.cl");
@@ -109,47 +108,37 @@ int main() {
         exit(err);
     }
 
+    random_device rd;
+    uniform_real_distribution<float> ud(0.0, 1.0);
+    mt19937 mt(rd());
+
     cl_int a, b, c;
     cin >> a >> b >> c;
-    int u[a][b];
-    int v[b][c];
-    int w[a][c];
+    float u[a][b];
+    float v[b][c];
+    float w[a][c];
 
     for (int i = 0; i < a; ++i) {
         for (int j = 0; j < b; ++j) {
-            cin >> u[i][j];
+            u[i][j] = ud(mt);
         }
     }
     for (int i = 0; i < b; ++i) {
         for (int j = 0; j < c; ++j) {
-            cin >> v[i][j];
+            v[i][j] = ud(mt);
         }
     }
 
-    auto buf1 = clCreateBuffer(context, CL_MEM_READ_ONLY, sizeof(cl_int) * a * b, 0, &err);
+    auto buf1 = clCreateBuffer(context, CL_MEM_READ_ONLY, sizeof(float) * a * b, 0, &err);
     if (err != 0) return err;
-    auto buf2 = clCreateBuffer(context, CL_MEM_READ_ONLY, sizeof(cl_int) * b * c, 0, &err);
+    auto buf2 = clCreateBuffer(context, CL_MEM_READ_ONLY, sizeof(float) * b * c, 0, &err);
     if (err != 0) return err;
-    auto buf3 = clCreateBuffer(context, CL_MEM_WRITE_ONLY, sizeof(cl_int) * a * c, 0, &err);
+    auto buf3 = clCreateBuffer(context, CL_MEM_WRITE_ONLY, sizeof(float) * a * c, 0, &err);
     if (err != 0) return err;
-//    auto buf1 = clCreateBuffer(context, CL_MEM_READ_ONLY, sizeof(cl_int), 0, 0);
-//    auto buf2 = clCreateBuffer(context, CL_MEM_READ_ONLY, sizeof(cl_int), 0, 0);
-//    auto buf3 = clCreateBuffer(context, CL_MEM_WRITE_ONLY, sizeof(cl_int), 0, 0);
-//    auto buf4 = clCreateBuffer(context, CL_MEM_READ_ONLY, sizeof(cl_int), 0, 0);
-//    auto buf5 = clCreateBuffer(context, CL_MEM_READ_ONLY, sizeof(cl_int), 0, 0);
-//    auto buf6 = clCreateBuffer(context, CL_MEM_READ_ONLY, sizeof(cl_int), 0, 0);
-
     if (!buf1 || !buf2 || !buf3) cout << "buffer allocation error";
 
-//    cl_int result;
-    cl_int tile_size = 16;
-
-    if (clEnqueueWriteBuffer(queue, buf1, false, 0, sizeof(cl_int) * a * b, u, 0, 0, 0) != 0) cout << "enq buff error";
-    if (clEnqueueWriteBuffer(queue, buf2, false, 0, sizeof(cl_int) * b * c, v, 0, 0, 0) != 0)  cout << "enq buff error";
-//    clEnqueueWriteBuffer(queue, buf3, false, 0, sizeof(cl_int), w, 0, 0, 0);
-//    clEnqueueWriteBuffer(queue, buf4, false, 0, sizeof(cl_int), &a, 0, 0, 0);
-//    clEnqueueWriteBuffer(queue, buf5, false, 0, sizeof(cl_int), &b, 0, 0, 0);
-//    clEnqueueWriteBuffer(queue, buf6, false, 0, sizeof(cl_int), &c, 0, 0, 0);
+    if (clEnqueueWriteBuffer(queue, buf1, false, 0, sizeof(float) * a * b, u, 0, 0, 0) != 0) cout << "enq buff error";
+    if (clEnqueueWriteBuffer(queue, buf2, false, 0, sizeof(float) * b * c, v, 0, 0, 0) != 0)  cout << "enq buff error";
 
     clSetKernelArg(kernel, 0, sizeof(cl_mem), &buf1);
     clSetKernelArg(kernel, 1, sizeof(cl_mem), &buf2);
@@ -161,15 +150,17 @@ int main() {
 
     size_t const dim1 = a;
     size_t const dim2 = c;
+    size_t const local_dim1 = TILE_W;
+    size_t const local_dim2 = TILE_H;
     size_t work_offset[2] = {0, 0};
-    size_t work_size[2] = {dim1, dim2};
+    size_t global_work_size[2] = {dim1, dim2};
+    size_t local_work_size[2] = {local_dim1, local_dim2};
     cl_event log;
-    err = clEnqueueNDRangeKernel(queue, kernel, 2, work_offset, work_size, nullptr, 0, 0, &log);
+    err = clEnqueueNDRangeKernel(queue, kernel, 2, work_offset, global_work_size, local_work_size, 0, 0, &log);
     if (err != 0){
-//        clGetEventProfilingInfo(log, )
         return err;
     }
-    clEnqueueReadBuffer(queue, buf3, true, 0, sizeof(cl_int) * a * c, &w, 0, 0, 0);
+    clEnqueueReadBuffer(queue, buf3, true, 0, sizeof(float) * a * c, w, 0, 0, 0);
     cl_ulong t_start, t_end;
     clGetEventProfilingInfo(log, CL_PROFILING_COMMAND_START, sizeof(cl_ulong), &t_start, nullptr);
     clGetEventProfilingInfo(log, CL_PROFILING_COMMAND_END, sizeof(cl_ulong), &t_end, nullptr);
@@ -182,8 +173,7 @@ int main() {
         cout << '\n';
     }
 
-//    cout << result << '\n';
-    cout << t_end - t_start << " ns elapsed";
+    cerr << t_end - t_start << " ns elapsed\n";
 
     free(devices);
     free(platforms);

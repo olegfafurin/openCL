@@ -8,31 +8,75 @@
 #include <vector>
 #include <cstring>
 #include <chrono>
+#include <algorithm>
+#include <random>
+#include "util.h"
 
 using namespace std;
 
-int main() {
-    cl_uint n;
-    clGetPlatformIDs(0, nullptr, &n);
-    auto ptr = (cl_platform_id *) malloc(n * sizeof(cl_platform_id));
-    clGetPlatformIDs(n, ptr, &n);
+auto GPU_NVIDIA = "NVIDIA";
+auto GPU_AMD = "AMD";
 
-    clGetDeviceIDs(ptr[0], CL_DEVICE_TYPE_GPU, 0, 0, &n);
-    auto ptr2 = (cl_device_id *) malloc(n * sizeof(cl_device_id));
-    clGetDeviceIDs(ptr[0], CL_DEVICE_TYPE_GPU, n, ptr2, &n);
-
-    for (int i = 0; i < n; ++i) {
-        size_t m;
-        clGetDeviceInfo(ptr2[i], CL_DEVICE_NAME, 0, 0, &m);
-        auto ptr3 = (char *) malloc(m * sizeof(char));
-        clGetDeviceInfo(ptr2[i], CL_DEVICE_NAME, m, ptr3, &m);
-        cout << ptr3 << '\n';
-        free(ptr3);
+tuple<bool, int, int, cl_device_type> get_device(cl_uint &platform_cnt, cl_platform_id * platforms, cl_device_type device_type, bool require_discrete_gpu) {
+    for (int i = 0; i < platform_cnt; ++i) {
+        cl_uint device_cnt = 0;
+        clGetDeviceIDs(platforms[i], device_type, 0, nullptr, &device_cnt);
+        auto devices = (cl_device_id *) malloc(device_cnt * sizeof(cl_device_id));
+        clGetDeviceIDs(platforms[i], device_type, platform_cnt, devices, &device_cnt);
+        if (device_cnt > 0) {
+            if (require_discrete_gpu) {
+                for (cl_uint j = 0; j < device_cnt; ++j) {
+                    size_t l;
+                    clGetDeviceInfo(devices[j], CL_DEVICE_NAME, 0, nullptr, &l);
+                    auto device = (char *) malloc(l * sizeof(char));
+                    clGetDeviceInfo(devices[j], CL_DEVICE_NAME, l, device, &l);
+                    if (strstr(device, GPU_AMD) != nullptr || strstr(device, GPU_NVIDIA) != nullptr) {
+                        cout << device << '\n';
+                        free(device);
+                        free(devices);
+                        return make_tuple(true, i, j, device_type);
+                    }
+                    free(device);
+                }
+            }
+            else {
+                size_t l;
+                clGetDeviceInfo(devices[0], CL_DEVICE_NAME, 0, nullptr, &l);
+                auto device = (char *) malloc(l * sizeof(char));
+                clGetDeviceInfo(devices[0], CL_DEVICE_NAME, l, device, &l);
+                cout << device << '\n';
+                free(device);
+                free(devices);
+                return make_tuple(true, i, 0, device_type);
+            }
+        }
+        free(devices);
     }
+    return make_tuple(false, 0, 0, device_type);
+}
 
-    auto context = clCreateContext(0, 1, ptr2, nullptr, nullptr, nullptr);
+int main() {
+    cl_uint platform_cnt, device_cnt;
+    clGetPlatformIDs(0, nullptr, &platform_cnt);
+    auto platforms = (cl_platform_id *) malloc(platform_cnt * sizeof(cl_platform_id));
+    clGetPlatformIDs(platform_cnt, platforms, &platform_cnt);
 
-    auto queue = clCreateCommandQueue(context, ptr2[0], CL_QUEUE_PROFILING_ENABLE, nullptr);
+    bool flag;
+    cl_platform_id platform;
+    cl_device_id device;
+    int platform_index, device_index;
+    cl_device_type device_type;
+
+    tie(flag, platform_index, device_index, device_type) = get_device(platform_cnt, platforms, CL_DEVICE_TYPE_GPU, true);
+    if (!flag) tie(flag, platform_index, device_index, device_type) = get_device(platform_cnt, platforms, CL_DEVICE_TYPE_GPU, false);
+    if (!flag) tie(flag, platform_index, device_index, device_type) = get_device(platform_cnt, platforms, CL_DEVICE_TYPE_CPU, false);
+
+    clGetDeviceIDs(platforms[platform_index], device_type, 0, 0, &device_cnt);
+    auto devices = (cl_device_id *) malloc(device_cnt * sizeof(cl_device_id));
+    clGetDeviceIDs(platforms[platform_index], device_type, platform_cnt, devices, &device_cnt);
+    auto context = clCreateContext(0, 1, devices, nullptr, nullptr, nullptr);
+
+    auto queue = clCreateCommandQueue(context, devices[0], CL_QUEUE_PROFILING_ENABLE, nullptr);
 
     ifstream fin("matrix_tile_device_program.cl");
     vector<char> text(1024, 0);
@@ -42,13 +86,13 @@ int main() {
     const size_t len = strlen(data);
 
     auto device_prog = clCreateProgramWithSource(context, 1, &data, &len, nullptr);
-    cl_int err = clBuildProgram(device_prog, 1, ptr2, "", nullptr, nullptr);
+    cl_int err = clBuildProgram(device_prog, 1, devices, "", nullptr, nullptr);
     if (err != 0) {
         cout << "fucked up\n";
         size_t s;
-        clGetProgramBuildInfo(device_prog, ptr2[0], CL_PROGRAM_BUILD_LOG, 0, 0, &s);
+        clGetProgramBuildInfo(device_prog, devices[0], CL_PROGRAM_BUILD_LOG, 0, 0, &s);
         auto ptr4 = (char *) malloc(s * sizeof(char));
-        clGetProgramBuildInfo(device_prog, ptr2[0], CL_PROGRAM_BUILD_LOG, s, ptr4, &s);
+        clGetProgramBuildInfo(device_prog, devices[0], CL_PROGRAM_BUILD_LOG, s, ptr4, &s);
         cout << ptr4;
         free(ptr4);
         exit(err);
@@ -62,45 +106,36 @@ int main() {
 
     cl_int a, b, c;
     cin >> a >> b >> c;
-    int u[a][b];
-    int v[b][c];
-    int w[a][c];
+    float u[a][b];
+    float v[b][c];
+    float w[a][c];
+
+    random_device rd;
+    uniform_real_distribution<float> ud(0.0, 1.0);
+    mt19937 mt(rd());
 
     for (int i = 0; i < a; ++i) {
         for (int j = 0; j < b; ++j) {
-            cin >> u[i][j];
+            u[i][j] = ud(mt);
         }
     }
     for (int i = 0; i < b; ++i) {
         for (int j = 0; j < c; ++j) {
-            cin >> v[i][j];
+            v[i][j] = ud(mt);
         }
     }
 
-    auto buf1 = clCreateBuffer(context, CL_MEM_READ_ONLY, sizeof(cl_int) * a * b, 0, &err);
+    auto buf1 = clCreateBuffer(context, CL_MEM_READ_ONLY, sizeof(float) * a * b, 0, &err);
     if (err != 0) return err;
-    auto buf2 = clCreateBuffer(context, CL_MEM_READ_ONLY, sizeof(cl_int) * b * c, 0, &err);
+    auto buf2 = clCreateBuffer(context, CL_MEM_READ_ONLY, sizeof(float) * b * c, 0, &err);
     if (err != 0) return err;
-    auto buf3 = clCreateBuffer(context, CL_MEM_WRITE_ONLY, sizeof(cl_int) * a * c, 0, &err);
+    auto buf3 = clCreateBuffer(context, CL_MEM_WRITE_ONLY, sizeof(float) * a * c, 0, &err);
     if (err != 0) return err;
-//    auto buf1 = clCreateBuffer(context, CL_MEM_READ_ONLY, sizeof(cl_int), 0, 0);
-//    auto buf2 = clCreateBuffer(context, CL_MEM_READ_ONLY, sizeof(cl_int), 0, 0);
-//    auto buf3 = clCreateBuffer(context, CL_MEM_WRITE_ONLY, sizeof(cl_int), 0, 0);
-//    auto buf4 = clCreateBuffer(context, CL_MEM_READ_ONLY, sizeof(cl_int), 0, 0);
-//    auto buf5 = clCreateBuffer(context, CL_MEM_READ_ONLY, sizeof(cl_int), 0, 0);
-//    auto buf6 = clCreateBuffer(context, CL_MEM_READ_ONLY, sizeof(cl_int), 0, 0);
 
     if (!buf1 || !buf2 || !buf3) cout << "buffer allocation error";
 
-//    cl_int result;
-    cl_int tile_size = 16;
-
-    if (clEnqueueWriteBuffer(queue, buf1, false, 0, sizeof(cl_int) * a * b, u, 0, 0, 0) != 0) cout << "enq buff error";
-    if (clEnqueueWriteBuffer(queue, buf2, false, 0, sizeof(cl_int) * b * c, v, 0, 0, 0) != 0)  cout << "enq buff error";
-//    clEnqueueWriteBuffer(queue, buf3, false, 0, sizeof(cl_int), w, 0, 0, 0);
-//    clEnqueueWriteBuffer(queue, buf4, false, 0, sizeof(cl_int), &a, 0, 0, 0);
-//    clEnqueueWriteBuffer(queue, buf5, false, 0, sizeof(cl_int), &b, 0, 0, 0);
-//    clEnqueueWriteBuffer(queue, buf6, false, 0, sizeof(cl_int), &c, 0, 0, 0);
+    if (clEnqueueWriteBuffer(queue, buf1, false, 0, sizeof(float) * a * b, u, 0, 0, 0) != 0) cout << "enq buff error";
+    if (clEnqueueWriteBuffer(queue, buf2, false, 0, sizeof(float) * b * c, v, 0, 0, 0) != 0)  cout << "enq buff error";
 
     clSetKernelArg(kernel, 0, sizeof(cl_mem), &buf1);
     clSetKernelArg(kernel, 1, sizeof(cl_mem), &buf2);
@@ -117,15 +152,12 @@ int main() {
     cl_event log;
     err = clEnqueueNDRangeKernel(queue, kernel, 2, work_offset, work_size, nullptr, 0, 0, &log);
     if (err != 0){
-//        clGetEventProfilingInfo(log, )
-        cout << err;
         return err;
     }
-    clEnqueueReadBuffer(queue, buf3, true, 0, sizeof(cl_int) * a * c, &w, 0, 0, 0);
+    clEnqueueReadBuffer(queue, buf3, true, 0, sizeof(float) * a * c, &w, 0, 0, 0);
     cl_ulong t_start, t_end;
     clGetEventProfilingInfo(log, CL_PROFILING_COMMAND_START, sizeof(cl_ulong), &t_start, nullptr);
     clGetEventProfilingInfo(log, CL_PROFILING_COMMAND_END, sizeof(cl_ulong), &t_end, nullptr);
-
 
     for (int i = 0; i < a; ++i) {
         for (int j = 0; j < c; ++j) {
@@ -134,10 +166,8 @@ int main() {
         cout << '\n';
     }
 
-//    cout << result << '\n';
-    cout << t_end - t_start << " ns elapsed";
+    cerr << t_end - t_start << " ns elapsed\n";
 
-
-    free(ptr2);
-    free(ptr);
+    free(devices);
+    free(platforms);
 }
