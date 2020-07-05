@@ -11,10 +11,13 @@ add_executable(matrix_parallel matrix_openmp.cpp)
 add_executable(a+b_opencl a+b_opencl.cpp)
 add_executable(matrix_opencl matrix_opencl.cpp util.h)
 add_executable(matrix_tile_opencl matrix_tile_opencl.cpp util.h)
+add_executable(prefix_sum prefix_sum.cpp util.h)
+add_executable(prefix_sum_naive prefix_sum_naive.cpp util.h)
 
 target_link_libraries(matrix_opencl OpenCL)
 target_link_libraries(matrix_tile_opencl OpenCL)
 target_link_libraries(a+b_opencl OpenCL)
+target_link_libraries(prefix_sum OpenCL)
 
 FIND_PACKAGE(OpenMP)
 if(OPENMP_FOUND)

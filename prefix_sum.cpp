@@ -1,5 +1,5 @@
 //
-// Created by imd239 on 07/03/2020.
+// Created by imd on 7/5/20.
 //
 
 #include <CL/opencl.h>
@@ -7,12 +7,11 @@
 #include <fstream>
 #include <vector>
 #include <cstring>
-#include <chrono>
 #include "cmath"
 #include <algorithm>
 #include <random>
-#include "util.h"
 #include <sys/resource.h>
+#include "util.h"
 
 
 using namespace std;
@@ -86,7 +85,7 @@ int main() {
 
     auto queue = clCreateCommandQueue(context, devices[0], CL_QUEUE_PROFILING_ENABLE, nullptr);
 
-    ifstream fin("matrix_tile_device_program.cl");
+    ifstream fin("prefix_sum_device_program.cl");
     vector<char> text(1024, 0);
     fin.read(text.data(), 1024);
 
@@ -108,104 +107,69 @@ int main() {
         cout << "Device code has been built successfully\n";
     }
 
-    cl_kernel kernel = clCreateKernel(device_prog, "mult", &err);
+    cl_kernel kernel = clCreateKernel(device_prog, "prefix_sum", &err);
 
     if (err == 0) cout << "Kernel has been created successfully\n";
     else {
         cout << "Kernel creation error: exit code " << err << '\n';
         exit(err);
     }
-    cl_int a, b, c;
-    cin >> a >> b >> c;
-    float u[a][b];
-    float v[b][c];
-    float w[a][c];
-
-    cl_float8 vec{};
+    cl_int n = PREFIX_SUM_WORK_SIZE;
+//    cin >> n;
+    float arr[n];
+    float res[n];
 
     random_device rd;
     uniform_real_distribution<float> ud(0.0, 1.0);
     mt19937 mt(rd());
 
-    for (int i = 0; i < a; ++i) {
-        for (int j = 0; j < b; ++j) {
-            u[i][j] = ud(mt);
-        }
+    for (int i = 0; i < n; ++i) {
+        arr[i] = ud(mt);
+        cout << arr[i] << ' ';
     }
-    for (int i = 0; i < b; ++i) {
-        for (int j = 0; j < c; ++j) {
-            v[i][j] = ud(mt);
-        }
-    }
+    cout << '\n';
 
-    auto buf1 = clCreateBuffer(context, CL_MEM_READ_ONLY, sizeof(float) * a * b, 0, &err);
+    auto buf_in = clCreateBuffer(context, CL_MEM_READ_ONLY, sizeof(float) * n, 0, &err);
     if (err != 0) return err;
-    auto buf2 = clCreateBuffer(context, CL_MEM_READ_ONLY, sizeof(float) * b * c, 0, &err);
-    if (err != 0) return err;
-    auto buf3 = clCreateBuffer(context, CL_MEM_WRITE_ONLY, sizeof(float) * a * c, 0, &err);
+    auto buf_out = clCreateBuffer(context, CL_MEM_WRITE_ONLY, sizeof(float) * n, 0, &err);
     if (err != 0) return err;
 
-    if (!buf1 || !buf2 || !buf3) cout << "buffer allocation error";
+    if (!buf_in || !buf_out) cout << "buffer allocation error";
 
-    if (clEnqueueWriteBuffer(queue, buf1, false, 0, sizeof(float) * a * b, u, 0, 0, 0) != 0) cout << "enq buff error";
-    if (clEnqueueWriteBuffer(queue, buf2, false, 0, sizeof(float) * b * c, v, 0, 0, 0) != 0) cout << "enq buff error";
+    if (clEnqueueWriteBuffer(queue, buf_in, false, 0, sizeof(float) * n, arr, 0, 0, 0) != 0) cout << "enq buff error";
 
-    clSetKernelArg(kernel, 0, sizeof(cl_mem), &buf1);
-    clSetKernelArg(kernel, 1, sizeof(cl_mem), &buf2);
-    clSetKernelArg(kernel, 2, sizeof(cl_mem), &buf3);
-    clSetKernelArg(kernel, 3, sizeof(cl_uint), &a);
-    clSetKernelArg(kernel, 4, sizeof(cl_uint), &b);
-    clSetKernelArg(kernel, 5, sizeof(cl_uint), &c);
-    size_t const dim1 = a;
-    size_t const dim2 = c;
-    size_t work_offset[2] = {0, 0};
-    size_t work_size[2] = {dim1, dim2};
-//    if (TILE_H != TILE_W) {
-//        cerr << "Please, specify a square workgroup size for a convenient tiling optimization\n";
-//        return(1);
-//    }
-    size_t const local_dim1 = TILE_H;
-    size_t const local_dim2 = TILE_W;
-    size_t local_work_size[2] = {local_dim1, local_dim2};
+    clSetKernelArg(kernel, 0, sizeof(cl_mem), &buf_in);
+    clSetKernelArg(kernel, 1, sizeof(cl_mem), &buf_out);
+
+    size_t const dim = n;
+    size_t work_offset = 0;
+    size_t work_size = n;
+    size_t local_work_size = n;
     cl_event log;
-    err = clEnqueueNDRangeKernel(queue, kernel, 2, work_offset, work_size, local_work_size, 0, 0, &log);
+    err = clEnqueueNDRangeKernel(queue, kernel, 1, &work_offset, &work_size, &local_work_size, 0, 0, &log);
     if (err != 0) {
         return err;
     }
-    clEnqueueReadBuffer(queue, buf3, true, 0, sizeof(float) * a * c, w, 0, 0, 0);
+    clEnqueueReadBuffer(queue, buf_out, true, 0, sizeof(float) * n, res, 0, 0, 0);
     cl_ulong t_start, t_end;
     clGetEventProfilingInfo(log, CL_PROFILING_COMMAND_START, sizeof(cl_ulong), &t_start, nullptr);
     clGetEventProfilingInfo(log, CL_PROFILING_COMMAND_END, sizeof(cl_ulong), &t_end, nullptr);
 
-    for (int i = 0; i < a; ++i) {
-        for (int j = 0; j < c; ++j) {
-            cout << w[i][j] << ' ';
-        }
-        cout << '\n';
+    for (int i = 0; i < n; ++i) {
+        cout << res[i] << '\n';
     }
 
-    float check[a][c];
-    for (int i = 0; i < a; ++i) {
-        for (int j = 0; j < c; ++j) {
-            check[i][j] = 0;
-        }
-    }
-    for (int i = 0; i < a; ++i) {
-        for (int j = 0; j < c; ++j) {
-            for (int t = 0; t < b; ++t) {
-                check[i][j] += u[i][t] * v[t][j];
-            }
-
-        }
+    float check[n];
+    check[0] = arr[0];
+    for (int i = 1; i < n; ++i) {
+        check[i] = check[i - 1] + arr[i];
     }
 
-    for (int i = 0; i < a; ++i) {
-        for (int j = 0; j < c; ++j) {
-            float diff = check[i][j] - w[i][j];
-            float abs_diff = fabsf(diff);
-            if (abs_diff > EPS) {
-                cerr << "Inconsistent results " << i << ' ' << j << " : res=" << w[i][j] << ", check=" << check[i][j] << '\n';
-            }
+    for (int i = 0; i < n; ++i) {
+        float diff = check[i] - res[i];
+        float abs_diff = fabsf(diff);
+        if (abs_diff > EPS) {
+            cerr << "Inconsistent results " << i << " : res=" << res[i] << ", check=" << check[i] << '\n';
         }
     }
 

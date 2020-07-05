@@ -11,6 +11,7 @@
 #include <random>
 #include <tuple>
 #include "util.h"
+#include "sys/resource.h"
 
 using namespace std;
 
@@ -18,7 +19,7 @@ auto GPU_NVIDIA = "NVIDIA";
 auto GPU_AMD = "AMD";
 
 tuple<bool, int, int, cl_device_type> get_device(cl_uint &platform_cnt, cl_platform_id * platforms, cl_device_type device_type, bool require_discrete_gpu) {
-    for (int i = 0; i < platform_cnt; ++i) {
+    for (int i = 1; i < platform_cnt; ++i) {
         cl_uint device_cnt = 0;
         clGetDeviceIDs(platforms[i], device_type, 0, nullptr, &device_cnt);
         auto devices = (cl_device_id *) malloc(device_cnt * sizeof(cl_device_id));
@@ -56,6 +57,9 @@ tuple<bool, int, int, cl_device_type> get_device(cl_uint &platform_cnt, cl_platf
 }
 
 int main() {
+    struct rlimit lim = {256000*1024, 256000*1024};
+    setrlimit(RLIMIT_STACK, &lim);
+
     cl_uint platform_cnt, device_cnt;
     clGetPlatformIDs(0, nullptr, &platform_cnt);
     auto platforms = (cl_platform_id *) malloc(platform_cnt * sizeof(cl_platform_id));
@@ -67,8 +71,8 @@ int main() {
     int platform_index, device_index;
     cl_device_type device_type;
 
-    tie(flag, platform_index, device_index, device_type) = get_device(platform_cnt, platforms, CL_DEVICE_TYPE_GPU, true);
-    if (!flag) tie(flag, platform_index, device_index, device_type) = get_device(platform_cnt, platforms, CL_DEVICE_TYPE_GPU, false);
+//    tie(flag, platform_index, device_index, device_type) = get_device(platform_cnt, platforms, CL_DEVICE_TYPE_GPU, true);
+//    if (!flag) tie(flag, platform_index, device_index, device_type) = get_device(platform_cnt, platforms, CL_DEVICE_TYPE_GPU, false);
     if (!flag) tie(flag, platform_index, device_index, device_type) = get_device(platform_cnt, platforms, CL_DEVICE_TYPE_CPU, false);
 
     clGetDeviceIDs(platforms[platform_index], device_type, 0, 0, &device_cnt);
@@ -150,8 +154,8 @@ int main() {
 
     size_t const dim1 = a;
     size_t const dim2 = c;
-    size_t const local_dim1 = TILE_W;
-    size_t const local_dim2 = TILE_H;
+    size_t const local_dim1 = TILE_H;
+    size_t const local_dim2 = TILE_W;
     size_t work_offset[2] = {0, 0};
     size_t global_work_size[2] = {dim1, dim2};
     size_t local_work_size[2] = {local_dim1, local_dim2};

@@ -5,11 +5,14 @@
 #include <chrono>
 #include <iostream>
 #include <vector>
+#include "sys/resource.h"
 
 using namespace std;
 using namespace chrono;
 
 int main() {
+    struct rlimit lim = {256000*1024, 256000*1024};
+    setrlimit(RLIMIT_STACK, &lim);
 
     int n, m, k;
     cin >> n >> k >> m;

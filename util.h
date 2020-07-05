@@ -7,5 +7,6 @@
 
 #define TILE_W 16
 #define TILE_H 16
+#define PREFIX_SUM_WORK_SIZE 16
 
 #endif //VIDEOCARDS_UTIL_H
