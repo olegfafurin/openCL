@@ -115,8 +115,8 @@ int main() {
         cout << "Kernel creation error: exit code " << err << '\n';
         exit(err);
     }
-    cl_int a, b, c;
-    cin >> a >> b >> c;
+    cl_int a = 2048, b = 512, c = 1024;
+//    cin >> a >> b >> c;
     float u[a][b];
     float v[b][c];
     float w[a][c];
@@ -160,10 +160,10 @@ int main() {
     size_t const dim2 = c;
     size_t work_offset[2] = {0, 0};
     size_t work_size[2] = {dim1, dim2};
-//    if (TILE_H != TILE_W) {
-//        cerr << "Please, specify a square workgroup size for a convenient tiling optimization\n";
-//        return(1);
-//    }
+    if (TILE_H != TILE_W) {
+        cerr << "Please, specify a square workgroup size for a convenient tiling optimization\n";
+        return(1);
+    }
     size_t const local_dim1 = TILE_H;
     size_t const local_dim2 = TILE_W;
     size_t local_work_size[2] = {local_dim1, local_dim2};
@@ -177,12 +177,12 @@ int main() {
     clGetEventProfilingInfo(log, CL_PROFILING_COMMAND_START, sizeof(cl_ulong), &t_start, nullptr);
     clGetEventProfilingInfo(log, CL_PROFILING_COMMAND_END, sizeof(cl_ulong), &t_end, nullptr);
 
-    for (int i = 0; i < a; ++i) {
-        for (int j = 0; j < c; ++j) {
-            cout << w[i][j] << ' ';
-        }
-        cout << '\n';
-    }
+//    for (int i = 0; i < a; ++i) {
+//        for (int j = 0; j < c; ++j) {
+//            cout << w[i][j] << ' ';
+//        }
+//        cout << '\n';
+//    }
 
     float check[a][c];
     for (int i = 0; i < a; ++i) {
@@ -210,6 +210,8 @@ int main() {
     }
 
     cerr << t_end - t_start << " ns elapsed\n";
+    double gflops = (double) a * (double) b * (double) c * 2 / (double)(t_end - t_start) * 1'000'000'000;
+    cerr << gflops << " FLOPS\n";
 
     free(devices);
     free(platforms);

@@ -33,5 +33,7 @@ int main() {
     auto elapsed = duration_cast<nanoseconds>(t_end - t_start).count();
 
     cerr << elapsed << " ns elapsed\n";
+    double gflops = (double) n * log2((double) n) / (double)(elapsed) * 1'000'000'000;
+    cerr << gflops << " FLOPS\n";
 
 }

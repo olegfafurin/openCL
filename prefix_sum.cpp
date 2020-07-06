@@ -7,7 +7,7 @@
 #include <fstream>
 #include <vector>
 #include <cstring>
-#include "cmath"
+#include <cmath>
 #include <algorithm>
 #include <random>
 #include <sys/resource.h>
@@ -74,8 +74,8 @@ int main() {
     int platform_index, device_index;
     cl_device_type device_type;
 
-    tie(flag, platform_index, device_index, device_type) = get_device(platform_cnt, platforms, CL_DEVICE_TYPE_GPU, true);
-    if (!flag) tie(flag, platform_index, device_index, device_type) = get_device(platform_cnt, platforms, CL_DEVICE_TYPE_GPU, false);
+//    tie(flag, platform_index, device_index, device_type) = get_device(platform_cnt, platforms, CL_DEVICE_TYPE_GPU, true);
+//    if (!flag) tie(flag, platform_index, device_index, device_type) = get_device(platform_cnt, platforms, CL_DEVICE_TYPE_GPU, false);
     if (!flag) tie(flag, platform_index, device_index, device_type) = get_device(platform_cnt, platforms, CL_DEVICE_TYPE_CPU, false);
 
     clGetDeviceIDs(platforms[platform_index], device_type, 0, 0, &device_cnt);
@@ -83,7 +83,7 @@ int main() {
     clGetDeviceIDs(platforms[platform_index], device_type, platform_cnt, devices, &device_cnt);
     auto context = clCreateContext(0, 1, devices, nullptr, nullptr, nullptr);
 
-    auto queue = clCreateCommandQueue(context, devices[0], CL_QUEUE_PROFILING_ENABLE, nullptr);
+    auto queue = clCreateCommandQueue(context, devices[device_index], CL_QUEUE_PROFILING_ENABLE, nullptr);
 
     ifstream fin("prefix_sum_device_program.cl");
     vector<char> text(1024, 0);
@@ -98,10 +98,10 @@ int main() {
         cout << "Device code build error: \n";
         size_t s;
         clGetProgramBuildInfo(device_prog, devices[0], CL_PROGRAM_BUILD_LOG, 0, 0, &s);
-        auto ptr4 = (char *) malloc(s * sizeof(char));
-        clGetProgramBuildInfo(device_prog, devices[0], CL_PROGRAM_BUILD_LOG, s, ptr4, &s);
-        cout << ptr4;
-        free(ptr4);
+        auto msg = (char *) malloc(s * sizeof(char));
+        clGetProgramBuildInfo(device_prog, devices[0], CL_PROGRAM_BUILD_LOG, s, msg, &s);
+        cout << msg << '\n';
+        free(msg);
         exit(err);
     } else {
         cout << "Device code has been built successfully\n";
@@ -120,7 +120,7 @@ int main() {
     float res[n];
 
     random_device rd;
-    uniform_real_distribution<float> ud(0.0, 1.0);
+    uniform_real_distribution<float> ud(0.0, 0.001);
     mt19937 mt(rd());
 
     for (int i = 0; i < n; ++i) {
@@ -141,7 +141,6 @@ int main() {
     clSetKernelArg(kernel, 0, sizeof(cl_mem), &buf_in);
     clSetKernelArg(kernel, 1, sizeof(cl_mem), &buf_out);
 
-    size_t const dim = n;
     size_t work_offset = 0;
     size_t work_size = n;
     size_t local_work_size = n;
@@ -155,15 +154,23 @@ int main() {
     clGetEventProfilingInfo(log, CL_PROFILING_COMMAND_START, sizeof(cl_ulong), &t_start, nullptr);
     clGetEventProfilingInfo(log, CL_PROFILING_COMMAND_END, sizeof(cl_ulong), &t_end, nullptr);
 
+    cout << "res  : ";
     for (int i = 0; i < n; ++i) {
-        cout << res[i] << '\n';
+        cout << res[i] << ' ';
     }
+    cout << '\n';
 
     float check[n];
     check[0] = arr[0];
     for (int i = 1; i < n; ++i) {
         check[i] = check[i - 1] + arr[i];
     }
+
+    cout << "check: ";
+    for (int i = 0; i < n; ++i) {
+        cout << check[i] << ' ';
+    }
+    cout << '\n';
 
     for (int i = 0; i < n; ++i) {
         float diff = check[i] - res[i];
@@ -174,8 +181,9 @@ int main() {
     }
 
     cerr << t_end - t_start << " ns elapsed\n";
+    double gflops = (double) n * log2((double) n) / (double)(t_end - t_start) * 1'000'000'000;
+    cerr << gflops << " FLOPS\n";
 
     free(devices);
     free(platforms);
-    return 0;
 }
