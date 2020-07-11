@@ -12,7 +12,9 @@
 #include <algorithm>
 #include <random>
 #include "util.h"
+#include "newutil.h"
 
+#define CL_TARGET_OPENCL_VERSION 120
 
 using namespace std;
 
@@ -90,8 +92,8 @@ int main() {
 
     ifstream fin("matrix_opencl_mwpt_device_program.cl");
 //    ifstream fin("gemm4.cl");
-    vector<char> text(2500, 0);
-    fin.read(text.data(), 2500);
+    vector<char> text(3500, 0);
+    fin.read(text.data(), 3500);
 
     char const *data = text.data();
     const size_t len = strlen(data);
@@ -118,7 +120,9 @@ int main() {
         cout << "Kernel creation error: exit code " << err << '\n';
         exit(err);
     }
-    cl_uint a = 2048, b = 512, c = 1024;
+
+    size_t a = 2048, b = 512, c = 1024;
+//    size_t a, b, c;
 //    cin >> a >> b >> c;
 
     auto *u = new float[a * b];
@@ -160,13 +164,13 @@ int main() {
     clSetKernelArg(kernel, 3, sizeof(cl_uint), &a);
     clSetKernelArg(kernel, 4, sizeof(cl_uint), &b);
     clSetKernelArg(kernel, 5, sizeof(cl_uint), &c);
-    size_t const dim1 = a;
-    size_t const dim2 = c / WPT;
+    size_t const dim1 = a / WPT;
+    size_t const dim2 = c;
     size_t work_offset[2] = {0, 0};
-    size_t work_size[2] = {dim1, dim2};
-    size_t const local_dim1 = TILE_SIZE;
-    size_t const local_dim2 = TILE_SIZE / WPT;
-    size_t local_work_size[2] = {local_dim1, local_dim2};
+    size_t work_size[2] = {dim2, dim1};
+    size_t const local_dim1 = TILE_SIZE / WPT;
+    size_t const local_dim2 = TILE_SIZE;
+    size_t local_work_size[2] = {local_dim2, local_dim1};
     cl_event log;
     err = clEnqueueNDRangeKernel(queue, kernel, 2, work_offset, work_size, local_work_size, 0, 0, &log);
     if (err != 0) {
@@ -196,19 +200,24 @@ int main() {
             for (int t = 0; t < b; ++t) {
                 check[i * c + j] += u[i * b + t] * v[t * c + j];
             }
-
+            if (rand() < 1000) cout << i << ' ' << j << ' ' << check[i * c + j] << ' ' << w[i * c + j] << '\n';
         }
+//        cout << '\n';
     }
+
+    bool correct = true;
 
     for (int i = 0; i < a; ++i) {
         for (int j = 0; j < c; ++j) {
             float diff = check[i * c + j] - w[i * c + j];
             float abs_diff = fabsf(diff);
             if (abs_diff > EPS) {
-                cerr << "Inconsistent results " << i << ' ' << j << " : res=" << w[i * c + j] << ", check=" << check[i * c + j]
-                     << '\n';
+                correct = false;
             }
         }
+    }
+    if (!correct) {
+        cerr << "Inconsistent results\n";
     }
 
     cerr << t_end - t_start << " ns elapsed\n";

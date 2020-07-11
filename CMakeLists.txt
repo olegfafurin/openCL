@@ -3,8 +3,6 @@ project(videocards)
 # added -fopenmp
 
 set(CMAKE_CXX_STANDARD 17)
-#set(CMAKE_CXX_FLAGS -m32)
-#set(CMAKE_C_FLAGS -m32)
 add_executable(videocards main.cpp)
 add_executable(matrix_naive matrix_naive.cpp)
 add_executable(matrix_parallel matrix_openmp.cpp)
