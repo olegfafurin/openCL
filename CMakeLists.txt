@@ -13,9 +13,11 @@ add_executable(matrix_opencl matrix_opencl.cpp util.h)
 add_executable(matrix_tile_opencl matrix_tile_opencl.cpp util.h)
 add_executable(prefix_sum prefix_sum.cpp util.h)
 add_executable(prefix_sum_naive prefix_sum_naive.cpp util.h)
+add_executable(matrix_opencl_mwpt matrix_opencl_mwpt.cpp util.h)
 
 target_link_libraries(matrix_opencl OpenCL)
 target_link_libraries(matrix_tile_opencl OpenCL)
+target_link_libraries(matrix_opencl_mwpt OpenCL)
 target_link_libraries(a+b_opencl OpenCL)
 target_link_libraries(prefix_sum OpenCL)
 

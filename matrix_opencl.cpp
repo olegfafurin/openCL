@@ -154,8 +154,8 @@ int main() {
 
     size_t const dim1 = a;
     size_t const dim2 = c;
-    size_t const local_dim1 = TILE_H;
-    size_t const local_dim2 = TILE_W;
+    size_t const local_dim1 = TILE_SIZE;
+    size_t const local_dim2 = TILE_SIZE;
     size_t work_offset[2] = {0, 0};
     size_t global_work_size[2] = {dim1, dim2};
     size_t local_work_size[2] = {local_dim1, local_dim2};

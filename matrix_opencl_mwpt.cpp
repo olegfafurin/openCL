@@ -1,5 +1,5 @@
 //
-// Created by imd239 on 07/03/2020.
+// Created by imd on 10.07.2020.
 //
 
 #include <CL/opencl.h>
@@ -60,6 +60,7 @@ get_device(cl_uint &platform_cnt, cl_platform_id *platforms, cl_device_type devi
 }
 
 int main() {
+
     cl_uint platform_cnt, device_cnt;
     clGetPlatformIDs(0, nullptr, &platform_cnt);
     auto platforms = (cl_platform_id *) malloc(platform_cnt * sizeof(cl_platform_id));
@@ -87,9 +88,10 @@ int main() {
 
     auto queue = clCreateCommandQueue(context, devices[0], CL_QUEUE_PROFILING_ENABLE, nullptr);
 
-    ifstream fin("matrix_tile_device_program.cl");
-    vector<char> text(1024, 0);
-    fin.read(text.data(), 1024);
+    ifstream fin("matrix_opencl_mwpt_device_program.cl");
+//    ifstream fin("gemm4.cl");
+    vector<char> text(2500, 0);
+    fin.read(text.data(), 2500);
 
     char const *data = text.data();
     const size_t len = strlen(data);
@@ -116,7 +118,7 @@ int main() {
         cout << "Kernel creation error: exit code " << err << '\n';
         exit(err);
     }
-    cl_int a = 2048, b = 512, c = 1024;
+    cl_uint a = 2048, b = 512, c = 1024;
 //    cin >> a >> b >> c;
 
     auto *u = new float[a * b];
@@ -159,11 +161,11 @@ int main() {
     clSetKernelArg(kernel, 4, sizeof(cl_uint), &b);
     clSetKernelArg(kernel, 5, sizeof(cl_uint), &c);
     size_t const dim1 = a;
-    size_t const dim2 = c;
+    size_t const dim2 = c / WPT;
     size_t work_offset[2] = {0, 0};
     size_t work_size[2] = {dim1, dim2};
     size_t const local_dim1 = TILE_SIZE;
-    size_t const local_dim2 = TILE_SIZE;
+    size_t const local_dim2 = TILE_SIZE / WPT;
     size_t local_work_size[2] = {local_dim1, local_dim2};
     cl_event log;
     err = clEnqueueNDRangeKernel(queue, kernel, 2, work_offset, work_size, local_work_size, 0, 0, &log);
@@ -217,6 +219,7 @@ int main() {
     delete [] v;
     delete [] w;
     delete [] check;
+
     free(devices);
     free(platforms);
     return 0;
