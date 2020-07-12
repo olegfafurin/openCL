@@ -1,6 +1,6 @@
 #include "util.h"
 
-kernel void mult(global const float *a, global const float *b, global float *c, uint const M, uint const K, uint const N) {
+__kernel void mult(__global const float *a, __global const float *b, __global float *c, uint const M, uint const K, uint const N) {
 
     size_t const j = get_local_id(0);
     size_t const i = get_local_id(1) * WPT;

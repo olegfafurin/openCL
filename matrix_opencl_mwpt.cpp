@@ -7,19 +7,14 @@
 #include <fstream>
 #include <vector>
 #include <cstring>
-#include <chrono>
 #include "cmath"
 #include <algorithm>
 #include <random>
 #include "util.h"
-#include "newutil.h"
 
 #define CL_TARGET_OPENCL_VERSION 120
 
 using namespace std;
-
-auto GPU_NVIDIA = "GTX";
-auto GPU_AMD = "AMD";
 
 auto EPS = 0.001;
 
@@ -34,16 +29,21 @@ get_device(cl_uint &platform_cnt, cl_platform_id *platforms, cl_device_type devi
             if (require_discrete_gpu) {
                 for (cl_uint j = 0; j < device_cnt; ++j) {
                     size_t l;
-                    clGetDeviceInfo(devices[j], CL_DEVICE_NAME, 0, nullptr, &l);
-                    auto device = (char *) malloc(l * sizeof(char));
-                    clGetDeviceInfo(devices[j], CL_DEVICE_NAME, l, device, &l);
-                    if (strstr(device, GPU_AMD) != nullptr || strstr(device, GPU_NVIDIA) != nullptr) {
+                    clGetDeviceInfo(devices[j], CL_DEVICE_HOST_UNIFIED_MEMORY, 0, nullptr, &l);
+                    auto is_gpu = (cl_bool *) malloc(l * sizeof(char));
+                    clGetDeviceInfo(devices[j], CL_DEVICE_HOST_UNIFIED_MEMORY, l, is_gpu, &l);
+                    if (*is_gpu == CL_FALSE) {
+                        size_t l1;
+                        clGetDeviceInfo(devices[j], CL_DEVICE_NAME, 0, nullptr, &l1);
+                        auto device = (char *) malloc(l1 * sizeof(char));
+                        clGetDeviceInfo(devices[j], CL_DEVICE_NAME, l1, device, &l1);
                         cout << device << '\n';
                         free(device);
+                        free(is_gpu);
                         free(devices);
                         return make_tuple(true, i, j, device_type);
                     }
-                    free(device);
+                    free(is_gpu);
                 }
             } else {
                 size_t l;
@@ -88,10 +88,9 @@ int main() {
     clGetDeviceIDs(platforms[platform_index], device_type, platform_cnt, devices, &device_cnt);
     auto context = clCreateContext(0, 1, devices, nullptr, nullptr, nullptr);
 
-    auto queue = clCreateCommandQueue(context, devices[0], CL_QUEUE_PROFILING_ENABLE, nullptr);
+    auto queue = clCreateCommandQueue(context, devices[device_index], CL_QUEUE_PROFILING_ENABLE, nullptr);
 
     ifstream fin("matrix_opencl_mwpt_device_program.cl");
-//    ifstream fin("gemm4.cl");
     vector<char> text(3500, 0);
     fin.read(text.data(), 3500);
 
@@ -122,8 +121,6 @@ int main() {
     }
 
     size_t a = 2048, b = 512, c = 1024;
-//    size_t a, b, c;
-//    cin >> a >> b >> c;
 
     auto *u = new float[a * b];
     auto *v = new float[b * c];
@@ -181,12 +178,6 @@ int main() {
     clGetEventProfilingInfo(log, CL_PROFILING_COMMAND_START, sizeof(cl_ulong), &t_start, nullptr);
     clGetEventProfilingInfo(log, CL_PROFILING_COMMAND_END, sizeof(cl_ulong), &t_end, nullptr);
 
-//    for (int i = 0; i < a; ++i) {
-//        for (int j = 0; j < c; ++j) {
-//            cout << w[i][j] << ' ';
-//        }
-//        cout << '\n';
-//    }
 
     auto *check = new float[a * c];
 
@@ -200,9 +191,7 @@ int main() {
             for (int t = 0; t < b; ++t) {
                 check[i * c + j] += u[i * b + t] * v[t * c + j];
             }
-            if (rand() < 1000) cout << i << ' ' << j << ' ' << check[i * c + j] << ' ' << w[i * c + j] << '\n';
         }
-//        cout << '\n';
     }
 
     bool correct = true;
